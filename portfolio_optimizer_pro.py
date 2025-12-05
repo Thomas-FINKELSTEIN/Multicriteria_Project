@@ -752,38 +752,66 @@ def create_efficient_frontier_chart(df, selected=None, r_min=None):
 
 def create_monte_carlo_3d_chart(df):
     """Crée un nuage de points 3D pour Monte Carlo."""
-    if df is None or df.empty:
-        return go.Figure()
+    import plotly.express as px
 
-    fig = go.Figure(data=[go.Scatter3d(
-        x=df['Risk'].values * 100,
-        y=df['Return'].values * 100,
-        z=df['Cost'].values * 100,
-        mode='markers',
-        marker=dict(
-            size=3,
-            color=df['Sharpe'].values,
-            colorscale='Viridis',
-            opacity=0.8,
-            colorbar=dict(title='Sharpe', thickness=15)
-        ),
-        hovertemplate='Risque: %{x:.2f}%<br>Rendement: %{y:.2f}%<br>Coût: %{z:.3f}%<extra></extra>'
-    )])
+    if df is None or df.empty:
+        return None
+
+    # Préparer les données directement
+    plot_df = pd.DataFrame({
+        'Rendement': df['Return'].values * 100,
+        'Risque': df['Risk'].values * 100,
+        'Coût': df['Cost'].values * 100,
+        'Sharpe': df['Sharpe'].values
+    }).dropna()
+
+    if plot_df.empty:
+        return None
+
+    fig = px.scatter_3d(
+        plot_df,
+        x='Rendement',
+        y='Risque',
+        z='Coût',
+        color='Sharpe',
+        hover_data=['Sharpe']
+    )
 
     fig.update_layout(
-        height=600,
-        margin=dict(l=0, r=50, t=30, b=0),
-        scene=dict(
-            xaxis_title='Risque (%)',
-            yaxis_title='Rendement (%)',
-            zaxis_title='Coût (%)',
-            bgcolor='white'
-        ),
-        paper_bgcolor='white'
+        height=650,
+        margin=dict(l=0, r=0, b=0, t=30),
     )
 
     return fig
 
+
+def create_sector_bar(weights, tickers, sector_map):
+    """Crée un graphique à barres pour l'allocation sectorielle."""
+    df = pd.DataFrame({'Ticker': tickers, 'Weight': weights * 100})
+    df['Sector'] = df['Ticker'].map(sector_map).fillna('Autre')
+    df_sector = df.groupby('Sector')['Weight'].sum().reset_index()
+    df_sector = df_sector[df_sector['Weight'] > 0].sort_values('Weight', ascending=True)
+
+    if df_sector.empty:
+        return go.Figure()
+
+    fig = go.Figure(data=[go.Bar(
+        x=df_sector['Weight'],
+        y=df_sector['Sector'],
+        orientation='h',
+        marker=dict(color=COLORS['chart_1'])
+    )])
+
+    fig.update_layout(
+        font=dict(family='DM Sans'),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor=COLORS['white'],
+        margin=dict(l=100, r=30, t=20, b=50),
+        height=320,
+        xaxis=dict(title='Allocation (%)', gridcolor=COLORS['ivory']),
+    )
+
+    return fig
 
 def create_backtest_chart(returns, weights, initial=1000):
     """Crée un graphique de backtest."""
@@ -871,35 +899,6 @@ def create_allocation_donut(weights, tickers):
         height=320,
         showlegend=False,
         annotations=[dict(text='Actifs', x=0.5, y=0.5, font_size=14, showarrow=False)]
-    )
-
-    return fig
-
-
-def create_sector_bar(weights, tickers, sector_map):
-    """Crée un graphique à barres pour l'allocation sectorielle."""
-    df = pd.DataFrame({'Ticker': tickers, 'Weight': weights * 100})
-    df['Sector'] = df['Ticker'].map(sector_map).fillna('Autre')
-    df_sector = df.groupby('Sector')['Weight'].sum().reset_index()
-    df_sector = df_sector[df_sector['Weight'] > 0].sort_values('Weight', ascending=True)
-
-    if df_sector.empty:
-        return go.Figure()
-
-    fig = go.Figure(data=[go.Bar(
-        x=df_sector['Weight'],
-        y=df_sector['Sector'],
-        orientation='h',
-        marker=dict(color=COLORS['chart_1'])
-    )])
-
-    fig.update_layout(
-        font=dict(family='DM Sans'),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor=COLORS['white'],
-        margin=dict(l=100, r=30, t=20, b=50),
-        height=320,
-        xaxis=dict(title='Allocation (%)', gridcolor=COLORS['ivory']),
     )
 
     return fig
@@ -1084,60 +1083,353 @@ def main():
             else:
                 render_callout("Aucun portefeuille ne respecte r_min. Réduisez le seuil.", "warning")
 
-    # ─────────────────────────────────
+    # ─────────────────────────────────────────
     # ONGLET 2 : MONTE CARLO
-    # ─────────────────────────────────
+    # ─────────────────────────────────────────
     with tab2:
         render_section("02", "Optimisation Tri-Objectif Monte Carlo",
-                       f"Avec contrainte de cardinalité K={max_k} et coûts de transaction c={c_prop*100:.2f}%")
+                       f"Avec contrainte de cardinalité K={max_k}")
 
-        render_callout(
-            "<strong>Amélioration :</strong> Ajout de la <strong>contrainte de cardinalité</strong> (max K actifs) "
-            f"et des <strong>coûts de transaction</strong> f₃. Résolution par Monte Carlo (5,000 simulations).",
-            "success"
-        )
+        # Toggle pour le mode rééquilibrage
+        mode_reequilibrage = st.toggle("🔄 Vous possédez déjà un portefeuille ?", value=False)
 
-        if st.button("🎲 Lancer Simulation Monte Carlo", key="btn_mc"):
-            with st.spinner("Génération de 5,000 portefeuilles..."):
-                st.session_state['mc_df'] = optimizer.run_monte_carlo(5000, max_k)
-                st.success("Simulation terminée !")
+        if mode_reequilibrage:
+            # ═══════════════════════════════════════
+            # MODE RÉÉQUILIBRAGE (3D)
+            # ═══════════════════════════════════════
+            render_callout(
+                "<strong>Mode Rééquilibrage :</strong> Définissez votre portefeuille actuel ci-dessous. "
+                "Les coûts de transaction varieront selon l'écart entre votre position actuelle et les nouveaux portefeuilles.",
+                "success"
+            )
 
-        if st.session_state['mc_df'] is not None and not st.session_state['mc_df'].empty:
-            df_mc = st.session_state['mc_df']
+            st.markdown("### 📊 Votre portefeuille actuel")
+            st.caption("Définissez le pourcentage de chaque actif dans votre portefeuille actuel (total = 100%)")
 
-            # Graphique 3D
-            fig_3d = create_monte_carlo_3d_chart(df_mc)
-            st.plotly_chart(fig_3d, use_container_width=True, theme=None)
+            # Créer les sliders pour le portefeuille actuel
+            w_current = []
+            cols = st.columns(min(4, len(tickers)))
 
-            # Meilleurs portefeuilles
-            render_section("", "Meilleurs Portefeuilles", "Respectant r_min, triés par risque")
+            for i, ticker in enumerate(tickers):
+                with cols[i % 4]:
+                    val = st.number_input(
+                        f"{ticker}",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=5.0,
+                        key=f"w_current_{ticker}"
+                    )
+                    w_current.append(val / 100)
 
-            valid = df_mc[df_mc['Return'] >= r_min].sort_values(['Risk', 'Cost'])
+            w_current = np.array(w_current)
+            total_current = w_current.sum() * 100
 
-            if not valid.empty:
-                top5 = valid.head(5).copy()
-                display = top5[['Return', 'Risk', 'Cost', 'Sharpe', 'N_Assets']].copy()
-                display.columns = ['Rendement (%)', 'Risque (%)', 'Coût (%)', 'Sharpe', '# Actifs']
-                display['Rendement (%)'] = (display['Rendement (%)'] * 100).round(2)
-                display['Risque (%)'] = (display['Risque (%)'] * 100).round(2)
-                display['Coût (%)'] = (display['Coût (%)'] * 100).round(3)
-                display = display.reset_index(drop=True)
-                display.index = display.index + 1
-
-                st.dataframe(display, use_container_width=True)
-
-                if st.button("✅ Sélectionner le Meilleur Portefeuille", type="primary"):
-                    best = valid.iloc[0]
-                    st.session_state['selected_portfolio'] = {
-                        'Return': best['Return'],
-                        'Risk': best['Risk'],
-                        'Sharpe': best['Sharpe'],
-                        'Weights': best['Weights'],
-                        'Cost': best['Cost']
-                    }
-                    st.success("Portefeuille sélectionné ! Allez à l'onglet Analyse.")
+            # Afficher le total
+            if abs(total_current - 100) < 0.1:
+                st.success(f"✓ Total : {total_current:.1f}%")
+            elif total_current > 0:
+                st.warning(f"⚠️ Total : {total_current:.1f}% (devrait être 100%)")
             else:
-                render_callout("Aucun portefeuille valide. Réduisez r_min ou augmentez K.", "warning")
+                st.info("💡 Laissez à 0% pour simuler un nouvel investisseur")
+
+            if st.button("🎲 Lancer Simulation Monte Carlo 3D", key="btn_mc_3d"):
+                with st.spinner("Génération de 5,000 portefeuilles..."):
+                    # Créer l'optimiseur avec le portefeuille actuel
+                    optimizer_rebal = PortfolioOptimizer(mu_sel, sigma_sel, w_current, c_prop)
+                    st.session_state['mc_df'] = optimizer_rebal.run_monte_carlo(5000, max_k)
+                    st.success("Simulation terminée !")
+
+            if st.session_state['mc_df'] is not None and not st.session_state['mc_df'].empty:
+                df_mc = st.session_state['mc_df']
+
+                # Vérifier si les coûts varient
+                cost_std = df_mc['Cost'].std()
+
+                if cost_std > 0.0001:
+                    # Les coûts varient → Graphique 3D
+                    plot_df = pd.DataFrame({
+                        'Rendement': df_mc['Return'].values * 100,
+                        'Risque': df_mc['Risk'].values * 100,
+                        'Coût': df_mc['Cost'].values * 100,
+                        'Sharpe': df_mc['Sharpe'].values
+                    }).dropna()
+
+                    plot_df['Qualité'] = pd.cut(
+                        plot_df['Sharpe'],
+                        bins=[-np.inf, 0.5, 0.8, 1.1, np.inf],
+                        labels=['Faible', 'Moyen', 'Bon', 'Excellent']
+                    )
+
+                    fig_3d = px.scatter_3d(
+                        plot_df,
+                        x='Rendement',
+                        y='Risque',
+                        z='Coût',
+                        color='Qualité',
+                        hover_data=['Sharpe'],
+                        opacity=0.8,
+                    )
+
+                    fig_3d.update_layout(
+                        height=650,
+                        margin=dict(l=0, r=0, b=0, t=30),
+                        scene=dict(
+                            xaxis_title='Rendement (%)',
+                            yaxis_title='Risque (%)',
+                            zaxis_title='Coût de Transaction (%)'
+                        ),
+                        legend=dict(
+                            title=dict(
+                                text='Qualité',
+                                font=dict(size=18),
+                                side='top center'
+                            ),
+                            font=dict(size=16),
+                            itemsizing='constant',
+                            itemwidth=50,
+                            yanchor='top',
+                            y=0.95,
+                            xanchor='right',
+                            x=0.99,
+                            bgcolor='rgba(255,255,255,0.9)',
+                            bordercolor='#ccc',
+                            borderwidth=1,
+                        )
+                    )
+
+                    # Espace pour la barre d'outils
+                    st.markdown('<div style="margin-top: 50px;"></div>', unsafe_allow_html=True)
+
+                    st.plotly_chart(
+                        fig_3d,
+                        use_container_width=True,
+                        config={
+                            'displayModeBar': True,
+                            'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                            'displaylogo': False
+                        }
+                    )
+                else:
+                    st.warning(
+                        "Les coûts ne varient pas. Définissez un portefeuille actuel non-nul pour voir le graphique 3D.")
+
+                # Tableau des meilleurs portefeuilles
+                render_section("", "Meilleurs Portefeuilles", "Respectant r_min, triés par risque puis coût")
+
+                valid = df_mc[df_mc['Return'] >= r_min].sort_values(['Risk', 'Cost'])
+
+                if not valid.empty:
+                    top5 = valid.head(5).copy()
+                    display = top5[['Return', 'Risk', 'Cost', 'Sharpe', 'N_Assets']].copy()
+                    display.columns = ['Rendement (%)', 'Risque (%)', 'Coût (%)', 'Sharpe', '# Actifs']
+                    display['Rendement (%)'] = (display['Rendement (%)'] * 100).round(2)
+                    display['Risque (%)'] = (display['Risque (%)'] * 100).round(2)
+                    display['Coût (%)'] = (display['Coût (%)'] * 100).round(3)
+                    display = display.reset_index(drop=True)
+                    display.index = display.index + 1
+
+                    st.dataframe(display, use_container_width=True)
+
+                    if st.button("✅ Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_3d"):
+                        best = valid.iloc[0]
+                        st.session_state['selected_portfolio'] = {
+                            'Return': best['Return'],
+                            'Risk': best['Risk'],
+                            'Sharpe': best['Sharpe'],
+                            'Weights': best['Weights'],
+                            'Cost': best['Cost']
+                        }
+                        st.success("Portefeuille sélectionné ! Allez à l'onglet Analyse.")
+                else:
+                    render_callout("Aucun portefeuille valide. Réduisez r_min ou augmentez K.", "warning")
+
+        else:
+            # ═══════════════════════════════════════
+            # MODE NOUVEL INVESTISSEUR (2D)
+            # ═══════════════════════════════════════
+            render_callout(
+                "<strong>Mode Nouvel Investisseur :</strong> Simulation pour un investisseur partant de zéro. "
+                f"Contrainte de cardinalité K={max_k} et coût de transaction fixe c={c_prop * 100:.2f}%.",
+                "success"
+            )
+
+            if st.button("🎲 Lancer Simulation Monte Carlo", key="btn_mc_2d"):
+                with st.spinner("Génération de 5,000 portefeuilles..."):
+                    st.session_state['mc_df'] = optimizer.run_monte_carlo(5000, max_k)
+                    st.success("Simulation terminée !")
+
+            if st.session_state['mc_df'] is not None and not st.session_state['mc_df'].empty:
+                df_mc = st.session_state['mc_df']
+
+                # Graphique 2D (Risque vs Rendement)
+                plot_df = pd.DataFrame({
+                    'Rendement': df_mc['Return'].values * 100,
+                    'Risque': df_mc['Risk'].values * 100,
+                    'Sharpe': df_mc['Sharpe'].values,
+                    'N_Assets': df_mc['N_Assets'].values
+                }).dropna()
+
+                plot_df['Qualité'] = pd.cut(
+                    plot_df['Sharpe'],
+                    bins=[-np.inf, 0.5, 0.8, 1.1, np.inf],
+                    labels=['Faible', 'Moyen', 'Bon', 'Excellent']
+                )
+
+                fig_2d = px.scatter(
+                    plot_df,
+                    x='Risque',
+                    y='Rendement',
+                    color='Qualité',
+                    hover_data=['Sharpe', 'N_Assets'],
+                    opacity=0.7,
+                )
+
+                fig_2d.update_traces(marker=dict(size=10, line=dict(width=0)))
+
+                fig_2d.update_layout(
+                    height=600,
+                    margin=dict(l=50, r=50, b=50, t=60),  # ← Augmenté à 60
+                    xaxis_title='Risque (%)',
+                    yaxis_title='Rendement (%)',
+                    plot_bgcolor='white',
+                    legend=dict(
+                        title=dict(
+                            text='Qualité',
+                            font=dict(size=18),
+                            side='top center'
+                        ),
+                        font=dict(size=16),
+                        itemsizing='constant',
+                        itemwidth=50,
+                        yanchor='top',
+                        y=0.95,
+                        xanchor='right',
+                        x=0.99,
+                        bgcolor='rgba(255,255,255,0.9)',
+                        bordercolor='#ccc',
+                        borderwidth=1,
+                    )
+                )
+
+                # Ligne r_min (style identique à la frontière efficiente)
+                fig_2d.add_hline(
+                    y=r_min * 100,
+                    line=dict(color=COLORS['terminal_orange'], width=2, dash='dash')
+                )
+
+                # Annotation r_min à gauche (comme frontière efficiente)
+                fig_2d.add_annotation(
+                    x=0,
+                    y=r_min * 100,
+                    xref='paper',
+                    yref='y',
+                    text=f"<b>{r_min * 100:.1f} %</b>",
+                    font=dict(size=17, color=COLORS['terminal_orange'], family='DM Mono'),
+                    showarrow=False,
+                    xanchor='right',
+                    xshift=-10,
+                )
+
+                fig_2d.update_layout(
+                    height=700,
+                    margin=dict(l=100, r=50, b=70, t=60),
+                    plot_bgcolor=COLORS['white'],
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(
+                        title=dict(
+                            text='Volatilité (%)',
+                            font=dict(size=20, color=COLORS['ink'], family='DM Sans'),
+                            standoff=50
+                        ),
+                        gridcolor=COLORS['ivory'],
+                        gridwidth=1,
+                        zeroline=False,
+                        tickfont=dict(size=15, color=COLORS['graphite']),
+                        showline=True,
+                        linewidth=1,
+                        linecolor=COLORS['pearl']
+                    ),
+                    yaxis=dict(
+                        title=dict(
+                            text='Rendement Annuel (%)',
+                            font=dict(size=20, color=COLORS['ink'], family='DM Sans'),
+                            standoff=70
+                        ),
+                        gridcolor=COLORS['ivory'],
+                        gridwidth=1,
+                        zeroline=False,
+                        tickfont=dict(size=15, color=COLORS['graphite']),
+                        showline=True,
+                        linewidth=1,
+                        linecolor=COLORS['pearl']
+                    ),
+                    legend=dict(
+                        title=dict(
+                            text='Qualité',
+                            font=dict(size=18),
+                            side='top center'
+                        ),
+                        font=dict(size=16),
+                        itemsizing='constant',
+                        itemwidth=50,
+                        yanchor='top',
+                        y=0.95,
+                        xanchor='right',
+                        x=0.99,
+                        bgcolor='rgba(255,255,255,0.9)',
+                        bordercolor='#ccc',
+                        borderwidth=1,
+                    )
+                )
+
+
+                # Espace pour la barre d'outils
+                st.markdown('<div style="margin-top: 50px;"></div>', unsafe_allow_html=True)
+
+                st.markdown('<div style="margin-top: 50px;"></div>', unsafe_allow_html=True)
+
+                st.plotly_chart(
+                    fig_2d,
+                    use_container_width=True,
+                    config={
+                        'displayModeBar': True,
+                        'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
+                        'displaylogo': False
+                    }
+                )
+
+                # Info sur le coût fixe
+                st.info(f"💡 **Coût de transaction fixe** : {c_prop * 100:.2f}% (nouvel investisseur partant de zéro)")
+
+                # Tableau des meilleurs portefeuilles
+                render_section("", "Meilleurs Portefeuilles", "Respectant r_min, triés par risque")
+
+                valid = df_mc[df_mc['Return'] >= r_min].sort_values('Risk')
+
+                if not valid.empty:
+                    top5 = valid.head(5).copy()
+                    display = top5[['Return', 'Risk', 'Sharpe', 'N_Assets']].copy()
+                    display.columns = ['Rendement (%)', 'Risque (%)', 'Sharpe', '# Actifs']
+                    display['Rendement (%)'] = (display['Rendement (%)'] * 100).round(2)
+                    display['Risque (%)'] = (display['Risque (%)'] * 100).round(2)
+                    display = display.reset_index(drop=True)
+                    display.index = display.index + 1
+
+                    st.dataframe(display, use_container_width=True)
+
+                    if st.button("✅ Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_2d"):
+                        best = valid.iloc[0]
+                        st.session_state['selected_portfolio'] = {
+                            'Return': best['Return'],
+                            'Risk': best['Risk'],
+                            'Sharpe': best['Sharpe'],
+                            'Weights': best['Weights'],
+                            'Cost': best['Cost']
+                        }
+                        st.success("Portefeuille sélectionné ! Allez à l'onglet Analyse.")
+                else:
+                    render_callout("Aucun portefeuille valide. Réduisez r_min ou augmentez K.", "warning")
 
     # ─────────────────────────────────
     # ONGLET 3 : ANALYSE
