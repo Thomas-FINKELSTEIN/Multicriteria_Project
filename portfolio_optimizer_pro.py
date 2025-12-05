@@ -25,7 +25,7 @@ warnings.filterwarnings('ignore')
 
 st.set_page_config(
     page_title="Portfolio Optimizer Pro",
-    page_icon="◈",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -337,9 +337,9 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def render_masthead():
     """Affiche l'en-tête principal."""
     st.markdown("""
-        <div class="masthead">
+        <div class="masthead" style="text-align: center;">
             <h1 class="masthead-title">Portfolio Optimizer</h1>
-            <p class="masthead-subtitle">
+            <p class="masthead-subtitle" style="text-align: center; margin-left: auto; margin-right: auto;">
                 Optimisation de portefeuille multi-objectifs utilisant le cadre moyenne-variance 
                 de Markowitz et la simulation Monte Carlo avec contraintes de cardinalité.
             </p>
@@ -951,7 +951,7 @@ def main():
         )
 
         if len(tickers) >= 2:
-            st.success(f"✓ {len(tickers)} actifs sélectionnés")
+            st.success(f"{len(tickers)} actifs sélectionnés")
 
         if len(tickers) < 2:
             st.info("Sélectionnez au moins 2 actifs pour continuer.")
@@ -988,7 +988,7 @@ def main():
         st.markdown('<div class="sidebar-section">Simulation</div>', unsafe_allow_html=True)
         initial = st.number_input("Investissement Initial (€)", 100, 1000000, 1000, 100)
 
-        with st.expander("📐 Formules"):
+        with st.expander("Formules"):
             st.markdown("""
             **Objectifs :**
             - f₁ = -w'μ (Rendement)
@@ -1008,10 +1008,10 @@ def main():
     # ONGLETS PRINCIPAUX
     # =================================
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Frontière Efficiente",
-        "🎲 Monte Carlo 3D",
-        "📊 Analyse Portefeuille",
-        "📚 Documentation"
+        "Frontière Efficiente",
+        "Monte Carlo 3D",
+        "Analyse Portefeuille",
+        "Documentation"
     ])
 
     # ─────────────────────────────────
@@ -1027,7 +1027,7 @@ def main():
             "success"
         )
 
-        if st.button("🚀 Calculer la Frontière Efficiente", key="btn_frontier"):
+        if st.button("Calculer la Frontière Efficiente", key="btn_frontier"):
             with st.spinner("Calcul en cours..."):
                 st.session_state['frontier_df'] = optimizer.compute_efficient_frontier(60)
                 st.success("Frontière calculée !")
@@ -1091,7 +1091,7 @@ def main():
                        f"Avec contrainte de cardinalité K={max_k}")
 
         # Toggle pour le mode rééquilibrage
-        mode_reequilibrage = st.toggle("🔄 Vous possédez déjà un portefeuille ?", value=False)
+        mode_reequilibrage = st.toggle("Vous possédez déjà un portefeuille ?", value=False)
 
         if mode_reequilibrage:
             # ═══════════════════════════════════════
@@ -1103,7 +1103,7 @@ def main():
                 "success"
             )
 
-            st.markdown("### 📊 Votre portefeuille actuel")
+            st.markdown("### Votre portefeuille actuel")
             st.caption("Définissez le pourcentage de chaque actif dans votre portefeuille actuel (total = 100%)")
 
             # Créer les sliders pour le portefeuille actuel
@@ -1127,13 +1127,13 @@ def main():
 
             # Afficher le total
             if abs(total_current - 100) < 0.1:
-                st.success(f"✓ Total : {total_current:.1f}%")
+                st.success(f"Total : {total_current:.1f}%")
             elif total_current > 0:
-                st.warning(f"⚠️ Total : {total_current:.1f}% (devrait être 100%)")
+                st.warning(f"Total : {total_current:.1f}% (devrait être 100%)")
             else:
-                st.info("💡 Laissez à 0% pour simuler un nouvel investisseur")
+                st.info("Laissez à 0% pour simuler un nouvel investisseur")
 
-            if st.button("🎲 Lancer Simulation Monte Carlo 3D", key="btn_mc_3d"):
+            if st.button("Lancer Simulation Monte Carlo 3D", key="btn_mc_3d"):
                 with st.spinner("Génération de 5,000 portefeuilles..."):
                     # Créer l'optimiseur avec le portefeuille actuel
                     optimizer_rebal = PortfolioOptimizer(mu_sel, sigma_sel, w_current, c_prop)
@@ -1231,7 +1231,7 @@ def main():
 
                     st.dataframe(display, use_container_width=True)
 
-                    if st.button("✅ Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_3d"):
+                    if st.button("Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_3d"):
                         best = valid.iloc[0]
                         st.session_state['selected_portfolio'] = {
                             'Return': best['Return'],
@@ -1254,7 +1254,7 @@ def main():
                 "success"
             )
 
-            if st.button("🎲 Lancer Simulation Monte Carlo", key="btn_mc_2d"):
+            if st.button("Lancer Simulation Monte Carlo", key="btn_mc_2d"):
                 with st.spinner("Génération de 5,000 portefeuilles..."):
                     st.session_state['mc_df'] = optimizer.run_monte_carlo(5000, max_k)
                     st.success("Simulation terminée !")
@@ -1400,7 +1400,7 @@ def main():
                 )
 
                 # Info sur le coût fixe
-                st.info(f"💡 **Coût de transaction fixe** : {c_prop * 100:.2f}% (nouvel investisseur partant de zéro)")
+                st.info(f"**Coût de transaction fixe** : {c_prop * 100:.2f}% (nouvel investisseur partant de zéro)")
 
                 # Tableau des meilleurs portefeuilles
                 render_section("", "Meilleurs Portefeuilles", "Respectant r_min, triés par risque")
@@ -1418,7 +1418,7 @@ def main():
 
                     st.dataframe(display, use_container_width=True)
 
-                    if st.button("✅ Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_2d"):
+                    if st.button("Sélectionner le Meilleur Portefeuille", type="primary", key="btn_select_2d"):
                         best = valid.iloc[0]
                         st.session_state['selected_portfolio'] = {
                             'Return': best['Return'],
@@ -1445,7 +1445,7 @@ def main():
 
             # Vérifier la synchronisation
             if len(weights) != len(tickers):
-                st.error(f"⚠️ Désynchronisation : le portefeuille a {len(weights)} actifs, "
+                st.error(f"Désynchronisation : le portefeuille a {len(weights)} actifs, "
                         f"mais {len(tickers)} sont sélectionnés. Relancez le calcul.")
             else:
                 # Métriques
