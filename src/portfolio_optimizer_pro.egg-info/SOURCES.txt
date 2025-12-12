@@ -1,13 +1,17 @@
 README.md
 pyproject.toml
 src/portfolio_app/__init__.py
+src/portfolio_app/app_main.py
 src/portfolio_app/charts.py
 src/portfolio_app/config.py
 src/portfolio_app/core.py
 src/portfolio_app/data_loader.py
+src/portfolio_app/optimizer.py
+src/portfolio_app/robustness.py
 src/portfolio_app/styles.py
 src/portfolio_app/ui_components.py
 src/portfolio_optimizer_pro.egg-info/PKG-INFO
 src/portfolio_optimizer_pro.egg-info/SOURCES.txt
 src/portfolio_optimizer_pro.egg-info/dependency_links.txt
+src/portfolio_optimizer_pro.egg-info/requires.txt
 src/portfolio_optimizer_pro.egg-info/top_level.txt
