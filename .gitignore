@@ -6,22 +6,3 @@ __pycache__/
 outputs/
 logs/
 .streamlit/secrets.toml
-
-# =========================
-# Cleanup / generated files
-# =========================
-
-# IDE
-.idea/
-
-# Python cache
-__pycache__/
-*.py[cod]
-
-# Build artifacts
-*.egg-info/
-
-# Optional folders (if present)
-logs/
-outputs/
-notebooks/
